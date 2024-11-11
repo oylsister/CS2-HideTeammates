@@ -1,0 +1,23 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>CS2_HideTeammates</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>warnings</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CounterStrikeSharp.API" Version="1.0.286" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="ClientPrefsAPI">
+      <HintPath>API\ClientPrefsAPI.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="lang\**\*.*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

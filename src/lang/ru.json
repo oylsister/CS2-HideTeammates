@@ -1,0 +1,8 @@
+{
+  "Cvar.Notify": "Переменная '{0}' была изменёна на '{1}'",
+  "Reply.PluginDisabled": "Сейчас {red}отключено",
+  "Reply.EnableAllMap": "Скрытие тиммейтов сейчас {green}Включено {default}на {lightblue}Всей карте",
+  "Reply.Enable": "Скрытие тиммейтов сейчас {green}Включено {default}на дистанции {lightblue}{0}",
+  "Reply.Wrong": "Скрытие тиммейтов. {red}Ошибка ввода{default}, Диапозон {lime}0{default}-{lime}{0}",
+  "Reply.Disable": "Скрытие тиммейтов сейчас {red}Отключено"
+} 

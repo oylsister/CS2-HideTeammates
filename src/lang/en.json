@@ -1,0 +1,8 @@
+{
+  "Cvar.Notify": "Cvar '{0}' has been changed to '{1}'",
+  "Reply.PluginDisabled": "Hide command is currently {red}disabled",
+  "Reply.EnableAllMap": "Hiding teammates across the {lightblue}entire map",
+  "Reply.Enable": "Hiding teammates within {lightblue}{0} {default}units",
+  "Reply.Wrong": "{red}Wrong distance input{default}, range must be between {lime}0{default}-{lime}{0}",
+  "Reply.Disable": "{red}Unhidden {default}all teammates"
+} 
