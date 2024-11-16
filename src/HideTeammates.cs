@@ -16,7 +16,7 @@ namespace CS2_HideTeammates
 	public class HideTeammates : BasePlugin
 	{
 		float TIMERTIME = 0.3f;
-		static IClientPrefsApi _CP_api;
+		static IClientPrefsAPI _CP_api;
 		bool g_bEnable = true;
 		int g_iMaxDistance = 8000;
 		bool[] g_bHide = new bool[65];
@@ -34,13 +34,13 @@ namespace CS2_HideTeammates
 		public override string ModuleName => "Hide Teammates";
 		public override string ModuleDescription => "A plugin that can !hide with individual distances";
 		public override string ModuleAuthor => "DarkerZ [RUS]";
-		public override string ModuleVersion => "1.DZ.0";
+		public override string ModuleVersion => "1.DZ.1";
 		public override void OnAllPluginsLoaded(bool hotReload)
 		{
 			try
 			{
-				PluginCapability<IClientPrefsApi> CapabilityEW = new("clientprefs:api");
-				_CP_api = IClientPrefsApi.Capability.Get();
+				PluginCapability<IClientPrefsAPI> CapabilityEW = new("clientprefs:api");
+				_CP_api = IClientPrefsAPI.Capability.Get();
 			}
 			catch (Exception)
 			{
