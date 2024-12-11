@@ -6,23 +6,20 @@ using CounterStrikeSharp.API.Modules.Cvars;
 using CounterStrikeSharp.API.Core.Attributes.Registration;
 using CounterStrikeSharp.API.Modules.Commands;
 using CounterStrikeSharp.API.Core.Capabilities;
-using CounterStrikeSharp.API.Modules.Timers;
 using static CounterStrikeSharp.API.Core.Listeners;
 using CounterStrikeSharp.API.Modules.Utils;
 using CounterStrikeSharp.API.Modules.Memory.DynamicFunctions;
+using CounterStrikeSharp.API.Modules.Commands.Targeting;
 
 namespace CS2_HideTeammates
 {
 	public class HideTeammates : BasePlugin
 	{
-		float TIMERTIME = 0.3f;
 		static IClientPrefsAPI _CP_api;
 		bool g_bEnable = true;
 		int g_iMaxDistance = 8000;
 		bool[] g_bHide = new bool[65];
 		int[] g_iDistance = new int[65];
-		List<CCSPlayerController>[] g_Target = new List<CCSPlayerController>[65];
-		CounterStrikeSharp.API.Modules.Timers.Timer g_Timer;
 
 		//Client Crash Fix From: https://github.com/qstage/CS2-HidePlayers
 		private static readonly MemoryFunctionVoid<CCSPlayerPawn, CSPlayerState> StateTransition = new(GameData.GetSignature("StateTransition"));
@@ -34,7 +31,7 @@ namespace CS2_HideTeammates
 		public override string ModuleName => "Hide Teammates";
 		public override string ModuleDescription => "A plugin that can !hide with individual distances";
 		public override string ModuleAuthor => "DarkerZ [RUS]";
-		public override string ModuleVersion => "1.DZ.1";
+		public override string ModuleVersion => "1.DZ.2";
 		public override void OnAllPluginsLoaded(bool hotReload)
 		{
 			try
@@ -59,7 +56,6 @@ namespace CS2_HideTeammates
 		public override void Load(bool hotReload)
 		{
 			StateTransition.Hook(Hook_StateTransition, HookMode.Post);
-			for (int i = 0; i < 65; i++) g_Target[i] = new List<CCSPlayerController>();
 			UI.Strlocalizer = Localizer;
 
 			g_bEnable = Cvar_Enable.Value;
@@ -81,11 +77,7 @@ namespace CS2_HideTeammates
 
 			RegisterEventHandler<EventPlayerConnectFull>(OnEventPlayerConnectFull);
 			RegisterEventHandler<EventPlayerDisconnect>(OnEventPlayerDisconnect);
-			RegisterListener<OnMapStart>(OnMapStart_Listener);
-			RegisterListener<OnMapEnd>(OnMapEnd_Listener);
 			RegisterListener<CheckTransmit>(OnTransmit);
-
-			CreateTimer();
 		}
 
 		public override void Unload(bool hotReload)
@@ -93,11 +85,7 @@ namespace CS2_HideTeammates
 			StateTransition.Unhook(Hook_StateTransition, HookMode.Post);
 			DeregisterEventHandler<EventPlayerConnectFull>(OnEventPlayerConnectFull);
 			DeregisterEventHandler<EventPlayerDisconnect>(OnEventPlayerDisconnect);
-			RemoveListener<OnMapStart>(OnMapStart_Listener);
-			RemoveListener<OnMapEnd>(OnMapEnd_Listener);
 			RemoveListener<CheckTransmit>(OnTransmit);
-
-			CloseTimer();
 		}
 
 		private void ForceFullUpdate(CCSPlayerController? player)
@@ -146,53 +134,43 @@ namespace CS2_HideTeammates
 			return HookResult.Continue;
 		}
 
-		void OnMapStart_Listener(string sMapName)
-		{
-			CreateTimer();
-		}
-
-		void OnMapEnd_Listener()
-		{
-			CloseTimer();
-		}
-
 		void OnTransmit(CCheckTransmitInfoList infoList)
 		{
 			if (!g_bEnable) return;
 			foreach ((CCheckTransmitInfo info, CCSPlayerController? player) in infoList)
 			{
-				if (player == null || !player.IsValid || !player.Pawn.IsValid || player.Pawn.Value == null || player.Pawn.Value.LifeState != (byte)LifeState_t.LIFE_ALIVE) continue;
+				if (player == null || !player.IsValid || !player.Pawn.IsValid || player.Connected != PlayerConnectedState.PlayerConnected) continue;
 
-				foreach (CCSPlayerController targetPlayer in g_Target[player.Slot].ToList())
+				foreach (CCSPlayerController target in Utilities.GetPlayers())
 				{
-					if (targetPlayer.IsValid && targetPlayer.Pawn.IsValid && targetPlayer.Pawn.Value != null && targetPlayer.Pawn.Value.LifeState == (byte)LifeState_t.LIFE_ALIVE)
-						info.TransmitEntities.Remove(targetPlayer.Pawn.Value);
-				}
-			}
-		}
+					if (target == null || target.IsHLTV || target.Slot == player.Slot)
+						continue;
 
-		void OnTimer()
-		{
-			if (!g_bEnable) return;
-			Utilities.GetPlayers().Where(p => p.IsValid && p.Pawn.IsValid && p.Pawn.Value?.LifeState == (byte)LifeState_t.LIFE_ALIVE).ToList().ForEach(player =>
-			{
-				g_Target[player.Slot].Clear();
-				if (g_bHide[player.Slot])
-				{
-					Utilities.GetPlayers().Where(target => target != null && target.IsValid && target.Pawn.IsValid && target.Slot != player.Slot && target.Team == player.Team && target.Pawn.Value?.LifeState == (byte)LifeState_t.LIFE_ALIVE).ToList().ForEach(targetplayer =>
+					var targetpawn = target.PlayerPawn.Value!;
+
+					if (player.Pawn.Value?.As<CCSPlayerPawnBase>().PlayerState == CSPlayerState.STATE_OBSERVER_MODE)
+						continue;
+
+					if ((LifeState_t)targetpawn.LifeState != LifeState_t.LIFE_ALIVE)
 					{
-						if (g_iDistance[player.Slot] == 0) g_Target[player.Slot].Add(targetplayer);
+						info.TransmitEntities.Remove(targetpawn);
+						continue;
+					}
+
+					if (target.Team == player.Team)
+					{
+						if (g_iDistance[player.Slot] == 0) info.TransmitEntities.Remove(targetpawn);
 						else
 						{
-							if (Distance(targetplayer.Pawn.Value?.AbsOrigin, player.Pawn.Value?.AbsOrigin) <= g_iDistance[player.Slot])
+							if (Distance(target.PlayerPawn.Value?.AbsOrigin, player.PlayerPawn.Value?.AbsOrigin) <= g_iDistance[player.Slot])
 							{
-								//Console.WriteLine($"Player: {player.Slot} Target: {targetplayer.Slot} Distance: {(float)(Distance(targetplayer.Pawn.Value?.AbsOrigin, player.Pawn.Value?.AbsOrigin))}");
-								g_Target[player.Slot].Add(targetplayer);
+								//Console.WriteLine($"Player: {player.Slot} Target: {target.Slot} Distance: {(float)(Distance(target.PlayerPawn.Value?.AbsOrigin, player.PlayerPawn.Value?.AbsOrigin))}");
+								info.TransmitEntities.Remove(targetpawn);
 							}
 						}
-					});
+					}
 				}
-			});
+			}
 		}
 
 		[ConsoleCommand("css_ht", "Allows to hide players and choose the distance")]
@@ -292,21 +270,6 @@ namespace CS2_HideTeammates
 				else await _CP_api.SetClientCookie(player.SteamID.ToString(), "HT_Hide", "0");
 
 				await _CP_api.SetClientCookie(player.SteamID.ToString(), "HT_Distance", g_iDistance[player.Slot].ToString());
-			}
-		}
-
-		void CreateTimer()
-		{
-			CloseTimer();
-			g_Timer = new CounterStrikeSharp.API.Modules.Timers.Timer(TIMERTIME, OnTimer, TimerFlags.REPEAT);
-		}
-
-		void CloseTimer()
-		{
-			if (g_Timer != null)
-			{
-				g_Timer.Kill();
-				g_Timer = null;
 			}
 		}
 
