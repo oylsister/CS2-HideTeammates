@@ -8,7 +8,9 @@ namespace CS2_HideTeammates
 {
 	internal class UI
 	{
+#nullable enable
 		public static IStringLocalizer? Strlocalizer;
+#nullable disable
 		public static void CvarChangeNotify(string sCvarName, string sCvarValue, bool bClientNotify)
 		{
 			if (Strlocalizer == null) return;

@@ -45,7 +45,9 @@ namespace CS2_HideTeammates
 			this.Slots = Marshal.PtrToStructure<CUtlVector>(base.Handle + SlotsOffset);
 		}
 
+#nullable enable
 		public CServerSideClient? GetClientBySlot(int playerSlot)
+#nullable disable
 		{
 			if (playerSlot >= 0 && playerSlot < this.Slots.m_iSize)
 				return this.Slots[playerSlot] == IntPtr.Zero ? null : new CServerSideClient(this.Slots[playerSlot]);
