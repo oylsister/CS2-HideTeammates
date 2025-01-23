@@ -15,6 +15,8 @@ Cvar | Parameter | Description
 --- | --- | ---
 `css_ht_enabled` | <0/1> | Enable/Disable plugin
 `css_ht_maximum` | <1000-8000> | The maximum distance a player can choose
+`css_ht_hide_activeweapon` | <0/1> | Disable/enable hiding active weapons [0/1]. Client crash tests needed
+`css_ht_hide_weapon` | <0/1> | Disable/enable hiding active weapons [0/1]. Client crash tests needed
 
 ## Commands:
 Client Command | Description
