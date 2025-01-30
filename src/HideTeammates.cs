@@ -9,8 +9,9 @@ using CounterStrikeSharp.API.Core.Capabilities;
 using CounterStrikeSharp.API.Modules.Timers;
 using static CounterStrikeSharp.API.Core.Listeners;
 using CounterStrikeSharp.API.Modules.Utils;
-using System.Drawing;
 using CounterStrikeSharp.API.Modules.Memory.DynamicFunctions;
+using CounterStrikeSharp.API.Modules.Memory;
+using CounterStrikeSharp.API.Modules.Commands.Targeting;
 
 namespace CS2_HideTeammates
 {
@@ -20,31 +21,24 @@ namespace CS2_HideTeammates
 		static IClientPrefsAPI _CP_api;
 		bool g_bEnable = true;
 		int g_iMaxDistance = 8000;
-		bool g_bHActWeapon = false;
-		bool g_bHWeapon = false;
-
 		bool[] g_bHide = new bool[65];
 		int[] g_iDistance = new int[65];
 		bool[] g_bRMB = new bool[65];
+		List<CCSPlayerController>[] g_Target = new List<CCSPlayerController>[65];
+		CounterStrikeSharp.API.Modules.Timers.Timer g_Timer;
 
 		//Client Crash Fix From: https://github.com/qstage/CS2-HidePlayers
 		private static readonly MemoryFunctionVoid<CCSPlayerPawn, CSPlayerState> StateTransition = new(GameData.GetSignature("StateTransition"));
 		private readonly INetworkServerService networkServerService = new();
-		private readonly CSPlayerState[] g_PlayerState = new CSPlayerState[65];
 
-		List<CEntityInstance>[] g_Target = new List<CEntityInstance>[65];
-		CDynamicProp[] g_Model = new CDynamicProp[65];
-		CounterStrikeSharp.API.Modules.Timers.Timer g_Timer;
+		static readonly MemoryFunctionVoid<long, long, long, long> CopyExistingEntity_missingFunc = new(GameData.GetSignature("CopyExistingEntity_missing"));
 
 		public FakeConVar<bool> Cvar_Enable = new("css_ht_enabled", "Disabled/enabled [0/1]", true, flags: ConVarFlags.FCVAR_NOTIFY, new RangeValidator<bool>(false, true));
 		public FakeConVar<int> Cvar_MaxDistance = new("css_ht_maximum", "The maximum distance a player can choose [1000-8000]", 8000, flags: ConVarFlags.FCVAR_NOTIFY, new RangeValidator<int>(1000, 8000));
-
-		public FakeConVar<bool> Cvar_ActiveWeapon = new("css_ht_hide_activeweapon", "Disable/enable hiding active weapons [0/1]", false, flags: ConVarFlags.FCVAR_NOTIFY, new RangeValidator<bool>(false, true));
-		public FakeConVar<bool> Cvar_Weapon = new("css_ht_hide_weapon", "Disable/enable hiding weapons [0/1]", false, flags: ConVarFlags.FCVAR_NOTIFY, new RangeValidator<bool>(false, true));
 		public override string ModuleName => "Hide Teammates";
 		public override string ModuleDescription => "A plugin that can !hide with individual distances";
 		public override string ModuleAuthor => "DarkerZ [RUS]";
-		public override string ModuleVersion => "1.DZ.4test2";
+		public override string ModuleVersion => "1.DZ.4test3";
 		public override void OnAllPluginsLoaded(bool hotReload)
 		{
 			try
@@ -68,8 +62,8 @@ namespace CS2_HideTeammates
 		}
 		public override void Load(bool hotReload)
 		{
-			StateTransition.Hook(Hook_StateTransition, HookMode.Post);
-			for (int i = 0; i < 65; i++) g_Target[i] = new List<CEntityInstance>();
+			StateTransition.Hook(Hook_StateTransition, HookMode.Pre);
+			for (int i = 0; i < 65; i++) g_Target[i] = new List<CCSPlayerController>();
 			UI.Strlocalizer = Localizer;
 
 			g_bEnable = Cvar_Enable.Value;
@@ -87,47 +81,34 @@ namespace CS2_HideTeammates
 				UI.CvarChangeNotify(Cvar_MaxDistance.Name, value.ToString(), Cvar_MaxDistance.Flags.HasFlag(ConVarFlags.FCVAR_NOTIFY));
 			};
 
-			g_bHActWeapon = Cvar_ActiveWeapon.Value;
-			Cvar_ActiveWeapon.ValueChanged += (sender, value) =>
-			{
-				g_bHActWeapon = value;
-				UI.CvarChangeNotify(Cvar_ActiveWeapon.Name, value.ToString(), Cvar_ActiveWeapon.Flags.HasFlag(ConVarFlags.FCVAR_NOTIFY));
-			};
-
-			g_bHWeapon = Cvar_Weapon.Value;
-			Cvar_Weapon.ValueChanged += (sender, value) =>
-			{
-				g_bHWeapon = value;
-				UI.CvarChangeNotify(Cvar_Weapon.Name, value.ToString(), Cvar_Weapon.Flags.HasFlag(ConVarFlags.FCVAR_NOTIFY));
-			};
-
 			RegisterFakeConVars(typeof(ConVar));
 
 			RegisterEventHandler<EventPlayerConnectFull>(OnEventPlayerConnectFull);
 			RegisterEventHandler<EventPlayerDisconnect>(OnEventPlayerDisconnect);
-			RegisterEventHandler<EventPlayerDeath>(OnEventPlayerDeathPre);
 			RegisterListener<OnMapStart>(OnMapStart_Listener);
 			RegisterListener<OnMapEnd>(OnMapEnd_Listener);
 			RegisterListener<CheckTransmit>(OnTransmit);
 			RegisterListener<OnTick>(OnOnTick_Listener);
+
+			VirtualFunctions.CBaseEntity_TakeDamageOldFunc.Hook(Hook_TakeDamageOld, HookMode.Pre);
 
 			CreateTimer();
 		}
 
 		public override void Unload(bool hotReload)
 		{
-			StateTransition.Unhook(Hook_StateTransition, HookMode.Post);
+			StateTransition.Unhook(Hook_StateTransition, HookMode.Pre);
 			DeregisterEventHandler<EventPlayerConnectFull>(OnEventPlayerConnectFull);
 			DeregisterEventHandler<EventPlayerDisconnect>(OnEventPlayerDisconnect);
-			DeregisterEventHandler<EventPlayerDeath>(OnEventPlayerDeathPre);
 			RemoveListener<OnMapStart>(OnMapStart_Listener);
 			RemoveListener<OnMapEnd>(OnMapEnd_Listener);
 			RemoveListener<CheckTransmit>(OnTransmit);
 			RemoveListener<OnTick>(OnOnTick_Listener);
 
+			VirtualFunctions.CBaseEntity_TakeDamageOldFunc.Unhook(Hook_TakeDamageOld, HookMode.Pre);
+
 			CloseTimer();
 		}
-
 #nullable enable
 		private void ForceFullUpdate(CCSPlayerController? player)
 #nullable disable
@@ -140,6 +121,28 @@ namespace CS2_HideTeammates
 			player.PlayerPawn.Value?.Teleport(null, player.PlayerPawn.Value.EyeAngles, null);
 		}
 
+		private HookResult Hook_TakeDamageOld(DynamicHook hook)
+		{
+			var victim = hook.GetParam<CEntityInstance>(0);
+			var info = hook.GetParam<CTakeDamageInfo>(1);
+
+			if (victim.DesignerName != "player") return HookResult.Continue;
+
+			var pawn = victim.As<CCSPlayerPawn>();
+
+			if (pawn == null || !pawn.IsValid) return HookResult.Continue;
+
+			if (info.DamageFlags.HasFlag(TakeDamageFlags_t.DFLAG_FORCE_DEATH))
+			{
+				info.DamageFlags &= ~TakeDamageFlags_t.DFLAG_FORCE_DEATH;
+				StateTransition.Invoke(pawn, CSPlayerState.STATE_WELCOME);
+
+				return HookResult.Changed;
+			}
+
+			return HookResult.Continue;
+		}
+
 		private HookResult Hook_StateTransition(DynamicHook hook)
 		{
 			var player = hook.GetParam<CCSPlayerPawn>(0).OriginalController.Value;
@@ -147,15 +150,11 @@ namespace CS2_HideTeammates
 
 			if (player is null) return HookResult.Continue;
 
-			if (state != g_PlayerState[player.Index])
+			if (state != player.Pawn.Value?.As<CCSPlayerPawnBase>().PlayerState)
 			{
-				if (state == CSPlayerState.STATE_OBSERVER_MODE || g_PlayerState[player.Index] == CSPlayerState.STATE_OBSERVER_MODE)
-				{
-					ForceFullUpdate(player);
-				}
+				ForceFullUpdate(player);
 			}
 
-			g_PlayerState[player.Index] = state;
 
 			return HookResult.Continue;
 		}
@@ -187,14 +186,6 @@ namespace CS2_HideTeammates
 			return HookResult.Continue;
 		}
 
-		[GameEventHandler(mode: HookMode.Pre)]
-		private HookResult OnEventPlayerDeathPre(EventPlayerDeath @event, GameEventInfo info)
-		{
-			CCSPlayerController? player = @event.Userid;
-			if (player != null && player.IsValid) RemoveModel(player);
-			return HookResult.Continue;
-		}
-
 		void OnMapStart_Listener(string sMapName)
 		{
 			CreateTimer();
@@ -212,11 +203,17 @@ namespace CS2_HideTeammates
 			foreach ((CCheckTransmitInfo info, CCSPlayerController? player) in infoList)
 #nullable disable
 			{
-				if (player == null || !player.IsValid || !player.Pawn.IsValid || player.Pawn.Value == null || player.Pawn.Value.LifeState != (byte)LifeState_t.LIFE_ALIVE) continue;
+				if (player == null || !player.IsValid || !player.Pawn.IsValid || player.Pawn.Value == null) continue;
 
-				foreach (CEntityInstance targetTransmit in g_Target[player.Slot].ToList())
+				foreach (CCSPlayerController targetPlayer in g_Target[player.Slot].ToList())
 				{
-					if (targetTransmit != null && targetTransmit.IsValid) info.TransmitEntities.Remove(targetTransmit);
+					if (targetPlayer == null || !targetPlayer.IsValid) continue;
+					var targetPawn = targetPlayer.PlayerPawn.Value;
+					if (targetPawn == null || !targetPawn.IsValid) continue;
+
+					if ((targetPawn.LifeState != (byte)LifeState_t.LIFE_DEAD || targetPawn.LifeState != (byte)LifeState_t.LIFE_DYING) && player.Pawn.Value?.As<CCSPlayerPawnBase>().PlayerState == CSPlayerState.STATE_OBSERVER_MODE) continue;
+
+					info.TransmitEntities.Remove(targetPawn.Index);
 				}
 			}
 		}
@@ -226,45 +223,18 @@ namespace CS2_HideTeammates
 			if (!g_bEnable) return;
 			Utilities.GetPlayers().Where(p => p.IsValid && p.Pawn.IsValid && p.Pawn.Value?.LifeState == (byte)LifeState_t.LIFE_ALIVE).ToList().ForEach(player =>
 			{
-				if (g_Model[player.Slot] == null || !g_Model[player.Slot].IsValid ||
-					g_Model[player.Slot].CBodyComponent!.SceneNode!.GetSkeletonInstance().ModelState.ModelName.CompareTo(player.Pawn.Value.CBodyComponent!.SceneNode!.GetSkeletonInstance().ModelState.ModelName) != 0)
-						SetModel(player, player.Pawn.Value.CBodyComponent!.SceneNode!.GetSkeletonInstance().ModelState.ModelName);
-
-				if(player.Pawn.Value.Render != Color.FromArgb(0, 255, 255, 255))
-				{
-					g_Model[player.Slot].Render = Color.FromArgb(player.Pawn.Value.Render.A, player.Pawn.Value.Render.R, player.Pawn.Value.Render.G, player.Pawn.Value.Render.B);
-					Utilities.SetStateChanged(g_Model[player.Slot], "CBaseModelEntity", "m_clrRender");
-
-					player.Pawn.Value.Render = Color.FromArgb(0, 255, 255, 255);
-					Utilities.SetStateChanged(player.Pawn.Value, "CBaseModelEntity", "m_clrRender");
-				}
-
 				g_Target[player.Slot].Clear();
 				if (g_bHide[player.Slot] && !g_bRMB[player.Slot])
 				{
-					Utilities.GetPlayers().Where(target => target != null && target.IsValid && target.Pawn.IsValid && target.Slot != player.Slot && target.Team == player.Team && target.Pawn.Value?.LifeState == (byte)LifeState_t.LIFE_ALIVE).ToList().ForEach(targetplayer =>
+					Utilities.GetPlayers().Where(target => target != null && target.IsValid && target.Pawn.IsValid && target.Slot != player.Slot && target.Team == player.Team).ToList().ForEach(targetplayer =>
 					{
-						if (g_iDistance[player.Slot] == 0 || Distance(targetplayer.Pawn.Value?.AbsOrigin, player.Pawn.Value?.AbsOrigin) <= g_iDistance[player.Slot])
+						if (g_iDistance[player.Slot] == 0) g_Target[player.Slot].Add(targetplayer);
+						else
 						{
-							g_Target[player.Slot].Add(g_Model[targetplayer.Slot]);
-
-							if (g_bHActWeapon)
+							if (Distance(targetplayer.Pawn.Value?.AbsOrigin, player.Pawn.Value?.AbsOrigin) <= g_iDistance[player.Slot])
 							{
-								var activeWeapon = targetplayer.Pawn.Value!.WeaponServices?.ActiveWeapon.Value;
-								if (activeWeapon != null && activeWeapon.IsValid) g_Target[player.Slot].Add(activeWeapon);
-							}
-
-							if (g_bHWeapon)
-							{
-								var myWeapons = targetplayer.Pawn.Value!.WeaponServices?.MyWeapons;
-								if (myWeapons != null)
-								{
-									foreach (var gun in myWeapons)
-									{
-										var weapon = gun.Value;
-										if (weapon != null) g_Target[player.Slot].Add(weapon);
-									}
-								}
+								//Console.WriteLine($"Player: {player.Slot} Target: {targetplayer.Slot} Distance: {(float)(Distance(targetplayer.Pawn.Value?.AbsOrigin, player.Pawn.Value?.AbsOrigin))}");
+								g_Target[player.Slot].Add(targetplayer);
 							}
 						}
 					});
@@ -374,42 +344,6 @@ namespace CS2_HideTeammates
 
 				_CP_api.SetClientCookie(player.SteamID.ToString(), "HT_Distance", g_iDistance[player.Slot].ToString());
 			}
-		}
-
-#nullable enable
-		void SetModel(CCSPlayerController? player, string sModelPath)
-#nullable disable
-		{
-			if (player == null || !player.IsValid || !player.Pawn.Value.IsValid || player.Pawn.Value.LifeState != (byte)LifeState_t.LIFE_ALIVE) return;
-			if (g_Model[player.Slot] != null && g_Model[player.Slot].IsValid)
-			{
-				g_Model[player.Slot].Remove();
-			}
-			g_Model[player.Slot] = null;
-
-			var entity = Utilities.CreateEntityByName<CDynamicProp>("prop_dynamic")!;
-			if (entity == null || !entity.IsValid) return;
-			
-			entity.Spawnflags = 256;
-			entity!.CBodyComponent!.SceneNode!.Owner!.Entity!.Flags = (uint)(entity.CBodyComponent!.SceneNode!.Owner!.Entity!.Flags & ~(1 << 2));
-			//entity.DispatchSpawn();
-			entity.SetModel(sModelPath);
-			entity.AcceptInput("FollowEntity", player.Pawn.Value, null, "!activator");
-
-			g_Model[player.Slot] = entity;
-		}
-
-		void RemoveModel(CCSPlayerController? player)
-		{
-			if (player == null || !player.IsValid || !player.Pawn.Value.IsValid) return;
-			if (g_Model[player.Slot] != null && g_Model[player.Slot].IsValid)
-			{
-				g_Model[player.Slot].Remove();
-			}
-			g_Model[player.Slot] = null;
-			ForceFullUpdate(player);
-			player.Pawn.Value.Render = Color.FromArgb(255, 255, 255, 255);
-			Utilities.SetStateChanged(player.Pawn.Value, "CBaseModelEntity", "m_clrRender");
 		}
 
 		void CreateTimer()
