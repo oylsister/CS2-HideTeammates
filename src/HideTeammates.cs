@@ -29,7 +29,6 @@ namespace CS2_HideTeammates
 		//Client Crash Fix From: https://github.com/qstage/CS2-HidePlayers
 		private static readonly MemoryFunctionVoid<CCSPlayerPawn, CSPlayerState> StateTransition = new(GameData.GetSignature("StateTransition"));
 		private readonly INetworkServerService networkServerService = new();
-		private readonly CSPlayerState[] g_PlayerState = new CSPlayerState[65];
 
 		public FakeConVar<bool> Cvar_Enable = new("css_ht_enabled", "Disabled/enabled [0/1]", true, flags: ConVarFlags.FCVAR_NOTIFY, new RangeValidator<bool>(false, true));
 		public FakeConVar<int> Cvar_MaxDistance = new("css_ht_maximum", "The maximum distance a player can choose [1000-8000]", 8000, flags: ConVarFlags.FCVAR_NOTIFY, new RangeValidator<int>(1000, 8000));
@@ -37,7 +36,7 @@ namespace CS2_HideTeammates
 		public override string ModuleName => "Hide Teammates";
 		public override string ModuleDescription => "A plugin that can !hide with individual distances";
 		public override string ModuleAuthor => "DarkerZ [RUS]";
-		public override string ModuleVersion => "1.DZ.5";
+		public override string ModuleVersion => "1.DZ.5.1";
 		public override void OnAllPluginsLoaded(bool hotReload)
 		{
 			try
@@ -131,15 +130,10 @@ namespace CS2_HideTeammates
 
 			if (player is null) return HookResult.Continue;
 
-			if (state != g_PlayerState[player.Index])
+			if (state != player.Pawn.Value?.As<CCSPlayerPawnBase>().PlayerState)
 			{
-				if (state == CSPlayerState.STATE_OBSERVER_MODE || g_PlayerState[player.Index] == CSPlayerState.STATE_OBSERVER_MODE)
-				{
-					ForceFullUpdate(player);
-				}
+				ForceFullUpdate(player);
 			}
-
-			g_PlayerState[player.Index] = state;
 
 			return HookResult.Continue;
 		}
