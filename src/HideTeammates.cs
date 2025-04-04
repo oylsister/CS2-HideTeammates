@@ -1,5 +1,4 @@
-﻿using ClientPrefsAPI;
-using CounterStrikeSharp.API;
+﻿using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Modules.Cvars.Validators;
 using CounterStrikeSharp.API.Modules.Cvars;
@@ -16,7 +15,6 @@ namespace CS2_HideTeammates
 	public class HideTeammates : BasePlugin
 	{
 		readonly float TIMERTIME = 0.3f;
-		static IClientPrefsAPI _CP_api;
 		bool g_bEnable = true;
 		int g_iMaxDistance = 8000;
 		bool g_bHideComm = false;
@@ -37,27 +35,7 @@ namespace CS2_HideTeammates
 		public override string ModuleDescription => "A plugin that can !hide with individual distances";
 		public override string ModuleAuthor => "DarkerZ [RUS]";
 		public override string ModuleVersion => "1.DZ.5.1";
-		public override void OnAllPluginsLoaded(bool hotReload)
-		{
-			try
-			{
-				PluginCapability<IClientPrefsAPI> CapabilityEW = new("clientprefs:api");
-				_CP_api = IClientPrefsAPI.Capability.Get();
-			}
-			catch (Exception)
-			{
-				_CP_api = null;
-				UI.PrintToConsole("ClientPrefs API Failed!", 15);
-			}
 
-			if (hotReload)
-			{
-				Utilities.GetPlayers().Where(p => p is { IsValid: true, IsBot: false, IsHLTV: false }).ToList().ForEach(player =>
-				{
-					GetValue(player);
-				});
-			}
-		}
 		public override void Load(bool hotReload)
 		{
 			StateTransition.Hook(Hook_StateTransition, HookMode.Post);
@@ -160,7 +138,6 @@ namespace CS2_HideTeammates
 		}
 		HookResult OnEventPlayerConnectFull(EventPlayerConnectFull @event, GameEventInfo info)
 		{
-			GetValue(@event.Userid);
 			return HookResult.Continue;
 		}
 
@@ -231,7 +208,6 @@ namespace CS2_HideTeammates
 			{
 				g_bHide[player.Slot] = true;
 				g_iDistance[player.Slot] = customdistance;
-				SetValue(player);
 				if (g_iDistance[player.Slot] == 0) UI.ReplyToCommand(player, bConsole, "Reply.EnableAllMap");
 				else UI.ReplyToCommand(player, bConsole, "Reply.Enable", g_iDistance[player.Slot]);
 			} else if (customdistance < -2 || customdistance > g_iMaxDistance)
@@ -240,12 +216,10 @@ namespace CS2_HideTeammates
 			} else if (customdistance == -1)
 			{
 				g_bHide[player.Slot] = false;
-				SetValue(player);
 				UI.ReplyToCommand(player, bConsole, "Reply.Disable");
 			} else if (customdistance == -2) //Later can be replaced by a menu
 			{
 				g_bHide[player.Slot] = !g_bHide[player.Slot];
-				SetValue(player);
 				if (g_bHide[player.Slot])
 				{
 					if (g_iDistance[player.Slot] == 0) UI.ReplyToCommand(player, bConsole, "Reply.EnableAllMap");
@@ -279,7 +253,6 @@ namespace CS2_HideTeammates
 			}
 			
 			g_bHide[player.Slot] = !g_bHide[player.Slot];
-			SetValue(player);
 			if (g_bHide[player.Slot])
 			{
 				if (g_iDistance[player.Slot] == 0) UI.ReplyToCommand(player, bConsole, "Reply.EnableAllMap");
@@ -297,38 +270,6 @@ namespace CS2_HideTeammates
 #nullable disable
 		{
 			if (g_bHideComm) OnCommandHideAll(player, command);
-		}
-#nullable enable
-		void GetValue(CCSPlayerController? player)
-#nullable disable
-		{
-			if (player == null || !player.IsValid) return;
-			if (_CP_api != null)
-			{
-				string sHide = _CP_api.GetClientCookie(player.SteamID.ToString(), "HT_Hide");
-				if (string.IsNullOrEmpty(sHide) || !Int32.TryParse(sHide, out int iHide)) iHide = 0;
-				if (iHide == 0) g_bHide[player.Slot] = false;
-				else g_bHide[player.Slot] = true;
-
-				string sDistance = _CP_api.GetClientCookie(player.SteamID.ToString(), "HT_Distance");
-				if (string.IsNullOrEmpty(sDistance) || !Int32.TryParse(sDistance, out int iDistance)) iDistance = 0;
-				if (iDistance <= 0) iDistance = 0;
-				else if (iDistance >= g_iMaxDistance) iDistance = g_iMaxDistance;
-				g_iDistance[player.Slot] = iDistance;
-			}
-		}
-#nullable enable
-		void SetValue(CCSPlayerController? player)
-#nullable disable
-		{
-			if (player == null || !player.IsValid) return;
-			if (_CP_api != null)
-			{
-				if (g_bHide[player.Slot]) _CP_api.SetClientCookie(player.SteamID.ToString(), "HT_Hide", "1");
-				else _CP_api.SetClientCookie(player.SteamID.ToString(), "HT_Hide", "0");
-
-				_CP_api.SetClientCookie(player.SteamID.ToString(), "HT_Distance", g_iDistance[player.Slot].ToString());
-			}
 		}
 
 		void CreateTimer()

@@ -1,0 +1,24 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CS2-HideTeammates", "src\CS2-HideTeammates.csproj", "{8D4D5D8F-E3A1-B846-C910-B0ADA0EF33BD}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{8D4D5D8F-E3A1-B846-C910-B0ADA0EF33BD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8D4D5D8F-E3A1-B846-C910-B0ADA0EF33BD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8D4D5D8F-E3A1-B846-C910-B0ADA0EF33BD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8D4D5D8F-E3A1-B846-C910-B0ADA0EF33BD}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {D833812C-688F-4062-BEF7-4F7BD4165495}
+	EndGlobalSection
+EndGlobal
